@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+
+  <!--
+    Two MSI outputs are produced by CI:
+      dotnet build                         → OneDriveLocalOpener-user.msi    (per-user,    no elevation)
+      dotnet build -p:InstallScope=machine → OneDriveLocalOpener-machine.msi (per-machine, admin required)
+  -->
+
+  <?if $(var.InstallScope) = machine ?>
+    <?define InstallDir = ProgramFiles64Folder ?>
+    <?define InstallSubDir = ACS Solutions\OneDriveLocalOpener ?>
+    <?define RegistryRoot = HKLM ?>
+    <?define PackageName = OneDrive Local Opener (All Users) ?>
+    <?define UpgradeCode = E5F2A3B1-7C4D-4E8F-9A2B-3C5D6E7F8A9B ?>
+  <?else?>
+    <?define InstallDir = LocalAppDataFolder ?>
+    <?define InstallSubDir = Programs\OneDriveLocalOpener ?>
+    <?define RegistryRoot = HKCU ?>
+    <?define PackageName = OneDrive Local Opener ?>
+    <?define UpgradeCode = F6A3B4C5-8D5E-4F9A-0B3C-4D6E7F8A9B0C ?>
+  <?endif?>
+
+  <Package Name="$(var.PackageName)"
+           Manufacturer="ACS Solutions Ltd"
+           Version="1.0.0"
+           UpgradeCode="$(var.UpgradeCode)"
+           Language="1033"
+           Codepage="1252">
+
+    <SummaryInformation Description="Opens OneDrive-synced files in their local application instead of downloading." />
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of OneDrive Local Opener is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Feature Id="ProductFeature" Title="OneDrive Local Opener" Level="1">
+      <ComponentGroupRef Id="HostFiles" />
+      <ComponentGroupRef Id="BrowserRegistration" />
+    </Feature>
+
+    <!--
+      Deferred custom action: runs Host.exe --register after files are installed.
+      Host.exe writes the NMH manifest and browser extension force-list entries.
+    -->
+    <SetProperty Id="RegisterNMH"
+                 Value="&quot;[INSTALLFOLDER]Host.exe&quot; --register --scope $(var.InstallScope)"
+                 Before="RegisterNMH"
+                 Sequence="execute" />
+    <CustomAction Id="RegisterNMH"
+                  BinaryRef="Wix4UtilCA_X86"
+                  DllEntry="WixQuietExec64"
+                  Execute="deferred"
+                  Impersonate="no"
+                  Return="check" />
+
+    <SetProperty Id="UnregisterNMH"
+                 Value="&quot;[INSTALLFOLDER]Host.exe&quot; --unregister --scope $(var.InstallScope)"
+                 Before="UnregisterNMH"
+                 Sequence="execute" />
+    <CustomAction Id="UnregisterNMH"
+                  BinaryRef="Wix4UtilCA_X86"
+                  DllEntry="WixQuietExec64"
+                  Execute="deferred"
+                  Impersonate="no"
+                  Return="ignore" />
+
+    <InstallExecuteSequence>
+      <Custom Action="RegisterNMH" After="InstallFiles">NOT Installed AND NOT REMOVE</Custom>
+      <Custom Action="UnregisterNMH" Before="RemoveFiles">Installed AND REMOVE~="ALL"</Custom>
+    </InstallExecuteSequence>
+
+    <ui:WixUI Id="WixUI_Minimal" />
+    <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
+  </Package>
+
+  <Fragment>
+    <StandardDirectory Id="$(var.InstallDir)">
+      <Directory Id="INSTALLFOLDER" Name="$(var.InstallSubDir)" />
+    </StandardDirectory>
+  </Fragment>
+
+  <Fragment>
+    <ComponentGroup Id="HostFiles" Directory="INSTALLFOLDER">
+      <Component Id="HostExe" Guid="A1B2C3D4-E5F6-4A7B-8C9D-E0F1A2B3C4D5">
+        <File Id="HostExeFile"
+              Source="$(var.HostPublishDir)Host.exe"
+              KeyPath="yes" />
+      </Component>
+      <Component Id="RuntimeConfig" Guid="B2C3D4E5-F6A7-4B8C-9D0E-F1A2B3C4D5E6">
+        <File Id="RuntimeConfigFile"
+              Source="$(var.HostPublishDir)Host.runtimeconfig.json"
+              KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <!-- NMH registry: written declaratively by WiX for clean uninstall tracking.
+         Host.exe --register also writes these + the NMH manifest JSON + extension force-list. -->
+    <ComponentGroup Id="BrowserRegistration" Directory="INSTALLFOLDER">
+      <Component Id="ChromeNmhReg" Guid="C3D4E5F6-A7B8-4C9D-0E1F-A2B3C4D5E6F7">
+        <RegistryKey Root="$(var.RegistryRoot)"
+                     Key="Software\Google\Chrome\NativeMessagingHosts\uk.co.acs_solutions.onedrive_local_opener">
+          <RegistryValue Type="string" Value="[INSTALLFOLDER]nmh-manifest.json" KeyPath="yes" />
+        </RegistryKey>
+      </Component>
+      <Component Id="EdgeNmhReg" Guid="D4E5F6A7-B8C9-4D0E-1F2A-B3C4D5E6F7A8">
+        <RegistryKey Root="$(var.RegistryRoot)"
+                     Key="Software\Microsoft\Edge\NativeMessagingHosts\uk.co.acs_solutions.onedrive_local_opener">
+          <RegistryValue Type="string" Value="[INSTALLFOLDER]nmh-manifest.json" KeyPath="yes" />
+        </RegistryKey>
+      </Component>
+    </ComponentGroup>
+  </Fragment>
+
+</Wix>

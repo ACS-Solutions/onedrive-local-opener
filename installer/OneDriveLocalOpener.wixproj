@@ -1,0 +1,19 @@
+<Project Sdk="WixToolset.Sdk/5.0.2">
+  <PropertyGroup>
+    <OutputName>OneDriveLocalOpener</OutputName>
+    <!--
+      Pass InstallScope=machine at build time to produce the per-machine MSI:
+        dotnet build -p:InstallScope=machine
+      Default is 'user' (no admin required).
+    -->
+    <InstallScope Condition="'$(InstallScope)' == ''">user</InstallScope>
+    <DefineConstants>InstallScope=$(InstallScope)</DefineConstants>
+    <HostPublishDir>$(MSBuildThisFileDirectory)..\host\publish\</HostPublishDir>
+    <DefineConstants>$(DefineConstants);HostPublishDir=$(HostPublishDir)</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="WixToolset.UI.wixext" Version="5.0.2" />
+    <PackageReference Include="WixToolset.Util.wixext" Version="5.0.2" />
+  </ItemGroup>
+</Project>

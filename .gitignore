@@ -1,0 +1,23 @@
+# Private key — never commit
+ext_private.pem
+ext_pubkey.der
+
+# Node
+extension/node_modules/
+extension/dist/
+extension/coverage/
+
+# .NET build outputs
+**/bin/
+**/obj/
+**/TestResults/
+**/publish/
+
+# MSI build outputs
+installer/*.msi
+installer/*.wixpdb
+artifacts/
+
+# OS
+.DS_Store
+Thumbs.db

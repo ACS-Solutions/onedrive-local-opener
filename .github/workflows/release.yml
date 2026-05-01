@@ -1,0 +1,135 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-extension:
+    name: Pack extension
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: extension
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: extension/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test -- --ci
+
+      - name: Pack extension zip (for store submission)
+        run: |
+          mkdir -p ../artifacts
+          zip -r ../artifacts/extension.zip manifest.json options.html popup.html dist/
+
+      - name: Upload extension zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: extension-zip
+          path: artifacts/extension.zip
+
+  build-host:
+    name: Publish host (self-contained)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Run tests
+        run: dotnet test host.tests/Host.Tests.csproj -c Release
+
+      - name: Publish (self-contained, win-x64)
+        run: dotnet publish host/Host.csproj -c Release -r win-x64 --self-contained -o host/publish
+
+      - name: Upload publish output
+        uses: actions/upload-artifact@v4
+        with:
+          name: host-publish
+          path: host/publish/
+
+  build-msi:
+    name: Build MSI installers
+    runs-on: windows-latest
+    needs: build-host
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install WiX toolset
+        run: dotnet tool install --global wix --version 5.0.2
+
+      - name: Add WiX extensions
+        run: |
+          wix extension add WixToolset.UI.wixext/5.0.2
+          wix extension add WixToolset.Util.wixext/5.0.2
+
+      - name: Download host publish output
+        uses: actions/download-artifact@v4
+        with:
+          name: host-publish
+          path: host/publish/
+
+      - name: Build per-user MSI
+        run: dotnet build installer/OneDriveLocalOpener.wixproj -c Release -p:InstallScope=user -p:OutputPath=../artifacts/
+
+      - name: Build per-machine MSI
+        run: dotnet build installer/OneDriveLocalOpener.wixproj -c Release -p:InstallScope=machine -p:OutputPath=../artifacts/
+
+      - name: Rename MSI outputs
+        shell: pwsh
+        run: |
+          $tag = '${{ github.ref_name }}'
+          Rename-Item artifacts/OneDriveLocalOpener.msi "OneDriveLocalOpener-user-$tag.msi" -ErrorAction SilentlyContinue
+          # second build overwrites; use intermediate output dirs instead
+          Write-Output "Artifacts:"
+          Get-ChildItem artifacts/
+
+      - name: Upload MSI artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: msi-artifacts
+          path: artifacts/*.msi
+
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [build-extension, build-msi]
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets/
+          merge-multiple: true
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-assets/**
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
