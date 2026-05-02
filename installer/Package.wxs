@@ -45,7 +45,7 @@
       Host.exe writes the NMH manifest and browser extension force-list entries.
     -->
     <SetProperty Id="RegisterNMH"
-                 Value="&quot;[INSTALLFOLDER]Host.exe&quot; --register --scope $(var.InstallScope)"
+                 Value="&quot;[INSTALLFOLDER]Host.exe&quot; register --scope $(var.InstallScope)"
                  Before="RegisterNMH"
                  Sequence="execute" />
     <CustomAction Id="RegisterNMH"
@@ -56,7 +56,7 @@
                   Return="check" />
 
     <SetProperty Id="UnregisterNMH"
-                 Value="&quot;[INSTALLFOLDER]Host.exe&quot; --unregister --scope $(var.InstallScope)"
+                 Value="&quot;[INSTALLFOLDER]Host.exe&quot; unregister --scope $(var.InstallScope)"
                  Before="UnregisterNMH"
                  Sequence="execute" />
     <CustomAction Id="UnregisterNMH"

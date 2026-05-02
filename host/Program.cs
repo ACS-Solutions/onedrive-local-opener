@@ -1,22 +1,37 @@
+using System.CommandLine;
 using System.Text.Json;
 using OneDriveLocalOpener;
 
-// Registration / unregistration mode (called by MSI installer)
-if (args.Length > 0 && args[0] is "--register" or "--unregister")
+// Registration mode — called by the MSI installer or manually.
+// Usage: Host.exe register   [--scope user|machine]
+//        Host.exe unregister [--scope user|machine]
+if (args.Length > 0)
 {
-    var scope = args.SkipWhile(a => !a.StartsWith("--scope="))
-                    .Select(a => a["--scope=".Length..])
-                    .FirstOrDefault() ?? "user";
+    // Each command gets its own Option instance — options cannot be shared across commands.
+    static Option<string> ScopeOption() =>
+        new Option<string>("--scope", "Install scope: 'user' (HKCU, no elevation) or 'machine' (HKLM, admin required)")
+        {
+            DefaultValueFactory = _ => "user"
+        }.AcceptOnlyFromAmong("user", "machine");
 
-    if (args[0] == "--register")
-        RegistrationHelper.Register(scope, AppContext.BaseDirectory);
-    else
-        RegistrationHelper.Unregister(scope);
+    var registerScope = ScopeOption();
+    var registerCmd = new Command("register", "Register the native messaging host and browser extensions");
+    registerCmd.Add(registerScope);
+    registerCmd.SetAction(r => RegistrationHelper.Register(r.GetValue(registerScope)!, AppContext.BaseDirectory));
 
-    return 0;
+    var unregisterScope = ScopeOption();
+    var unregisterCmd = new Command("unregister", "Remove the native messaging host registration");
+    unregisterCmd.Add(unregisterScope);
+    unregisterCmd.SetAction(r => RegistrationHelper.Unregister(r.GetValue(unregisterScope)!));
+
+    var rootCommand = new RootCommand("OneDrive Local Opener native messaging host");
+    rootCommand.Add(registerCmd);
+    rootCommand.Add(unregisterCmd);
+
+    return rootCommand.Parse(args).Invoke(new());
 }
 
-// Native messaging host loop
+// Native messaging host loop — no args means Chrome/Edge launched us via stdio.
 var mapper = new OneDriveMapper();
 var stdin = Console.OpenStandardInput();
 var stdout = Console.OpenStandardOutput();
