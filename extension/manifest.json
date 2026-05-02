@@ -4,7 +4,13 @@
   "version": "1.0.0",
   "description": "Opens OneDrive-synced files in their local application instead of downloading.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyKH6/m7t3Zn6+3JAjBTJiVUMsvwY30nrTeYfRlAJvUGVYnJhkvXTBuZv7d2zl3c5waYq5xbpwa2s+0+TX7vC4deu5clbs8rCUgI2jw8VUM/GgLNcVAl2j1iTm/dF9QjvX2MI2ydwmC8e+H8hbrwpjtYi01YHt/MHamYRTkAO3DuE6K9fj4Po/pRItT71sueGIV9C5+2/+7yDUkSD36PpkAzK3dCKW+eV41B50yfFehT7CMiE1a0jYWeA9OqNjU6lt0n4KY2NNYJsYIsroIUh5GHynTtqkSIkYw8Pv2Z5hEZ1Y2Zhe5JQM+o+FQnQzu7lRfkGMSj1SbjoBQe5Ugli/QIDAQAB",
-  "permissions": ["nativeMessaging", "storage"],
+  "permissions": ["nativeMessaging", "storage", "tabs", "downloads", "declarativeNetRequest"],
+  "host_permissions": ["https://*.sharepoint.com/*"],
+  "declarative_net_request": {
+    "rule_resources": [
+      { "id": "sharepoint_docs", "enabled": true, "path": "rules.json" }
+    ]
+  },
   "background": {
     "service_worker": "dist/background.js"
   },

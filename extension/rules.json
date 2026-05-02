@@ -1,0 +1,25 @@
+[
+  {
+    "id": 1,
+    "priority": 1,
+    "action": {
+      "type": "redirect",
+      "redirect": {
+        "regexSubstitution": "chrome-extension://pholklaheclnaflaniopejhmkikfmlel/handler.html#\\0"
+      }
+    },
+    "condition": {
+      "regexFilter": "(?i)^https://[^/]*\\.sharepoint\\.com/.*\\.(msg|eml|docx?|xlsx?|pptx?|pdf|one|csv|txt|rtf|vsdx?|mpp|zip)([?#].*)?$",
+      "resourceTypes": ["main_frame"]
+    }
+  },
+  {
+    "id": 2,
+    "priority": 2,
+    "action": { "type": "allow" },
+    "condition": {
+      "urlFilter": "*_odlo_bypass*",
+      "resourceTypes": ["main_frame"]
+    }
+  }
+]

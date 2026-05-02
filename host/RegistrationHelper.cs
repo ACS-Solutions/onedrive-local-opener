@@ -25,9 +25,14 @@ static class RegistrationHelper
 
         var hive = scope == "machine" ? Registry.LocalMachine : Registry.CurrentUser;
         WriteNmhRegistry(hive, manifestPath);
-        WriteForcelistRegistry(hive);
+        // Force-install policy only applies to machine-scope; HKCU\Software\Policies is
+        // managed by GPO infrastructure and is not writable by regular user processes.
+        if (scope == "machine")
+            WriteForcelistRegistry(hive);
 
         Console.Error.WriteLine($"Registered ({scope}) — manifest: {manifestPath}");
+        if (scope == "user")
+            Console.Error.WriteLine("Install the browser extension from the Chrome Web Store or Edge Add-ons to complete setup.");
     }
 
     public static void Unregister(string scope)
@@ -36,8 +41,11 @@ static class RegistrationHelper
 
         DeleteKey(hive, ChromeNmhKey);
         DeleteKey(hive, EdgeNmhKey);
-        RemoveForcelistEntry(hive, ChromeForcelist, ExtensionId);
-        RemoveForcelistEntry(hive, EdgeForcelist, ExtensionId);
+        if (scope == "machine")
+        {
+            RemoveForcelistEntry(hive, ChromeForcelist, ExtensionId);
+            RemoveForcelistEntry(hive, EdgeForcelist, ExtensionId);
+        }
 
         Console.Error.WriteLine($"Unregistered ({scope})");
     }

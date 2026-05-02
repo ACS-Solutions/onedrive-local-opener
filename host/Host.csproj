@@ -7,7 +7,6 @@
     <AssemblyName>Host</AssemblyName>
     <RootNamespace>OneDriveLocalOpener</RootNamespace>
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
-    <Optimize>true</Optimize>
   </PropertyGroup>
   <ItemGroup>
     <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">

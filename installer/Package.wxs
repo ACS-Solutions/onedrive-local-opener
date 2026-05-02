@@ -23,6 +23,7 @@
     <MediaTemplate EmbedCab="yes" />
 
     <!-- WixUI_Advanced default scope; the dialog lets the user change it. -->
+    <Property Id="ApplicationFolderName" Value="OneDrive Local Opener" />
     <Property Id="WixAppFolder" Value="WixPerUserFolder" />
 
     <Feature Id="ProductFeature" Title="OneDrive Local Opener" Level="1">
@@ -34,43 +35,56 @@
 
     <!--
       Post-install: run Host.exe register with the correct scope.
-      WixUI_Advanced sets APPLICATIONFOLDER to the resolved install path
-      and WixAppFolder to "WixPerUserFolder" or "WixPerMachineFolder".
+      Conditions use ALLUSERS rather than WixAppFolder because WixAppFolder is only
+      set during the UI sequence and is absent in silent installs.
+      WixUI_Advanced sets ALLUSERS=1 when the user picks per-machine.
     -->
-    <SetProperty Id="RegisterNMH"
+    <SetProperty Id="RegisterNMH_User"
                  Value="&quot;[APPLICATIONFOLDER]Host.exe&quot; register --scope user"
-                 Before="RegisterNMH" Sequence="execute"
-                 Condition="WixAppFolder = &quot;WixPerUserFolder&quot;" />
-    <SetProperty Id="RegisterNMH"
+                 Before="RegisterNMH_User" Sequence="execute" />
+    <CustomAction Id="RegisterNMH_User"
+                  BinaryRef="Wix4UtilCA_X64"
+                  DllEntry="WixQuietExec64"
+                  Execute="deferred"
+                  Impersonate="no"
+                  Return="check" />
+
+    <SetProperty Id="RegisterNMH_Machine"
                  Value="&quot;[APPLICATIONFOLDER]Host.exe&quot; register --scope machine"
-                 Before="RegisterNMH" Sequence="execute"
-                 Condition="WixAppFolder = &quot;WixPerMachineFolder&quot;" />
-    <CustomAction Id="RegisterNMH"
-                  BinaryRef="Wix4UtilCA_X86"
+                 Before="RegisterNMH_Machine" Sequence="execute" />
+    <CustomAction Id="RegisterNMH_Machine"
+                  BinaryRef="Wix4UtilCA_X64"
                   DllEntry="WixQuietExec64"
                   Execute="deferred"
                   Impersonate="no"
                   Return="check" />
 
     <!-- Pre-uninstall: run Host.exe unregister -->
-    <SetProperty Id="UnregisterNMH"
+    <SetProperty Id="UnregisterNMH_User"
                  Value="&quot;[APPLICATIONFOLDER]Host.exe&quot; unregister --scope user"
-                 Before="UnregisterNMH" Sequence="execute"
-                 Condition="WixAppFolder = &quot;WixPerUserFolder&quot;" />
-    <SetProperty Id="UnregisterNMH"
+                 Before="UnregisterNMH_User" Sequence="execute" />
+    <CustomAction Id="UnregisterNMH_User"
+                  BinaryRef="Wix4UtilCA_X64"
+                  DllEntry="WixQuietExec64"
+                  Execute="deferred"
+                  Impersonate="no"
+                  Return="ignore" />
+
+    <SetProperty Id="UnregisterNMH_Machine"
                  Value="&quot;[APPLICATIONFOLDER]Host.exe&quot; unregister --scope machine"
-                 Before="UnregisterNMH" Sequence="execute"
-                 Condition="WixAppFolder = &quot;WixPerMachineFolder&quot;" />
-    <CustomAction Id="UnregisterNMH"
-                  BinaryRef="Wix4UtilCA_X86"
+                 Before="UnregisterNMH_Machine" Sequence="execute" />
+    <CustomAction Id="UnregisterNMH_Machine"
+                  BinaryRef="Wix4UtilCA_X64"
                   DllEntry="WixQuietExec64"
                   Execute="deferred"
                   Impersonate="no"
                   Return="ignore" />
 
     <InstallExecuteSequence>
-      <Custom Action="RegisterNMH" After="InstallFiles">NOT Installed AND NOT REMOVE</Custom>
-      <Custom Action="UnregisterNMH" Before="RemoveFiles">Installed AND REMOVE~="ALL"</Custom>
+      <Custom Action="RegisterNMH_User"    After="InstallFiles"  Condition="NOT Installed AND NOT REMOVE AND NOT ALLUSERS = &quot;1&quot;" />
+      <Custom Action="RegisterNMH_Machine" After="InstallFiles"  Condition="NOT Installed AND NOT REMOVE AND ALLUSERS = &quot;1&quot;" />
+      <Custom Action="UnregisterNMH_User"    Before="RemoveFiles" Condition="Installed AND REMOVE~=&quot;ALL&quot; AND NOT ALLUSERS = &quot;1&quot;" />
+      <Custom Action="UnregisterNMH_Machine" Before="RemoveFiles" Condition="Installed AND REMOVE~=&quot;ALL&quot; AND ALLUSERS = &quot;1&quot;" />
     </InstallExecuteSequence>
 
     <!-- WixUI_Advanced: Welcome → (optional) scope selection → Install → Finish -->
@@ -82,12 +96,16 @@
   <Fragment>
     <!-- Per-user:    %LOCALAPPDATA%\Programs\OneDriveLocalOpener -->
     <StandardDirectory Id="LocalAppDataFolder">
-      <Directory Id="WixPerUserFolder" Name="Programs\OneDriveLocalOpener" />
+      <Directory Id="LocalAppDataProgramsFolder" Name="Programs">
+        <Directory Id="WixPerUserFolder" Name="OneDriveLocalOpener" />
+      </Directory>
     </StandardDirectory>
 
     <!-- Per-machine: %ProgramFiles%\ACS Solutions\OneDriveLocalOpener -->
     <StandardDirectory Id="ProgramFiles64Folder">
-      <Directory Id="WixPerMachineFolder" Name="ACS Solutions\OneDriveLocalOpener" />
+      <Directory Id="AcsSolutionsFolder" Name="ACS Solutions">
+        <Directory Id="WixPerMachineFolder" Name="OneDriveLocalOpener" />
+      </Directory>
     </StandardDirectory>
   </Fragment>
 
@@ -98,13 +116,24 @@
       to the correct directory regardless of scope. Only one group is active at runtime.
     -->
     <ComponentGroup Id="HostFiles_User" Directory="WixPerUserFolder">
+      <!--
+        ICE38: components in the user profile must use a registry KeyPath, not a file KeyPath.
+        ICE64: directories in the user profile must have RemoveFolder entries for uninstall cleanup.
+        RemoveFolder for Programs is safe — Windows silently skips non-empty directories.
+      -->
       <Component Id="HostExe_User" Guid="A1B2C3D4-E5F6-4A7B-8C9D-E0F1A2B3C4D5"
                  Condition="WixAppFolder = &quot;WixPerUserFolder&quot;">
-        <File Source="$(HostPublishDir)Host.exe" KeyPath="yes" />
+        <File Source="$(HostPublishDir)Host.exe" />
+        <RegistryValue Root="HKCU" Key="Software\ACS Solutions\OneDriveLocalOpener"
+                       Name="InstallDir" Type="string" Value="[WixPerUserFolder]" KeyPath="yes" />
+        <RemoveFolder Id="RemoveWixPerUserFolder" Directory="WixPerUserFolder" On="uninstall" />
+        <RemoveFolder Id="RemoveLocalAppDataProgramsFolder" Directory="LocalAppDataProgramsFolder" On="uninstall" />
       </Component>
       <Component Id="RuntimeConfig_User" Guid="B2C3D4E5-F6A7-4B8C-9D0E-F1A2B3C4D5E6"
                  Condition="WixAppFolder = &quot;WixPerUserFolder&quot;">
-        <File Source="$(HostPublishDir)Host.runtimeconfig.json" KeyPath="yes" />
+        <File Source="$(HostPublishDir)Host.runtimeconfig.json" />
+        <RegistryValue Root="HKCU" Key="Software\ACS Solutions\OneDriveLocalOpener"
+                       Name="RuntimeConfigPath" Type="string" Value="[WixPerUserFolder]Host.runtimeconfig.json" KeyPath="yes" />
       </Component>
     </ComponentGroup>
 

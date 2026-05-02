@@ -3,6 +3,9 @@
     <OutputName>OneDriveLocalOpener</OutputName>
     <HostPublishDir>$(MSBuildThisFileDirectory)..\host\publish\</HostPublishDir>
     <DefineConstants>HostPublishDir=$(HostPublishDir)</DefineConstants>
+    <!-- ICE91 fires on files in WixPerUserFolder but doesn't understand conditioned component groups.
+         Those components are never installed during a per-machine install. -->
+    <SuppressIces>ICE91</SuppressIces>
   </PropertyGroup>
 
   <ItemGroup>
