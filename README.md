@@ -110,4 +110,4 @@ cd extension && npm test
 
 OneDrive Local Opener is released under the **MIT Licence** and is free to use, deploy, and modify — including within corporate environments.
 
-If your organisation would like assistance with deployment, integration with your device management tooling, or ongoing support, **ACS Solutions Ltd** offers a straightforward installation and support agreement at a fixed, flat annual fee. Please get in touch at [alasdaircs@gmail.com](mailto:alasdaircs@gmail.com).
+If your organisation would like assistance with deployment, integration with your device management tooling, or ongoing support, **ACS Solutions Ltd** offers a straightforward installation and support agreement at a fixed, flat annual fee. Please get in touch at [info@acs-solutions.co.uk](mailto:info@acs-solutions.co.uk).
