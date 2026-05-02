@@ -6,6 +6,7 @@ ext_pubkey.der
 extension/node_modules/
 extension/dist/
 extension/coverage/
+extension/_metadata/
 
 # .NET build outputs
 **/bin/
@@ -24,3 +25,4 @@ Thumbs.db
 
 # Visual Studio
 .vs/
+**/*.user
