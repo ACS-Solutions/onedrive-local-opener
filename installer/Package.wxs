@@ -4,50 +4,47 @@
      xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
 
   <!--
-    Two MSI outputs are produced by CI:
-      dotnet build                         → OneDriveLocalOpener-user.msi    (per-user,    no elevation)
-      dotnet build -p:InstallScope=machine → OneDriveLocalOpener-machine.msi (per-machine, admin required)
+    Single MSI — per-user by default; user can switch to per-machine in the installer dialog.
+
+    Silent install for corporate deployment:
+      Per-user    — msiexec /i OneDriveLocalOpener.msi MSIINSTALLPERUSER=1 /quiet
+      Per-machine — msiexec /i OneDriveLocalOpener.msi ALLUSERS=1 /quiet
   -->
 
-  <?if $(var.InstallScope) = machine ?>
-    <?define InstallDir = ProgramFiles64Folder ?>
-    <?define InstallSubDir = ACS Solutions\OneDriveLocalOpener ?>
-    <?define RegistryRoot = HKLM ?>
-    <?define PackageName = OneDrive Local Opener (All Users) ?>
-    <?define UpgradeCode = E5F2A3B1-7C4D-4E8F-9A2B-3C5D6E7F8A9B ?>
-  <?else?>
-    <?define InstallDir = LocalAppDataFolder ?>
-    <?define InstallSubDir = Programs\OneDriveLocalOpener ?>
-    <?define RegistryRoot = HKCU ?>
-    <?define PackageName = OneDrive Local Opener ?>
-    <?define UpgradeCode = F6A3B4C5-8D5E-4F9A-0B3C-4D6E7F8A9B0C ?>
-  <?endif?>
-
-  <Package Name="$(var.PackageName)"
+  <Package Name="OneDrive Local Opener"
            Manufacturer="ACS Solutions Ltd"
            Version="1.0.0"
-           UpgradeCode="$(var.UpgradeCode)"
+           UpgradeCode="E5F2A3B1-7C4D-4E8F-9A2B-3C5D6E7F8A9B"
            Language="1033"
            Codepage="1252">
 
     <SummaryInformation Description="Opens OneDrive-synced files in their local application instead of downloading." />
-
     <MajorUpgrade DowngradeErrorMessage="A newer version of OneDrive Local Opener is already installed." />
     <MediaTemplate EmbedCab="yes" />
 
+    <!-- WixUI_Advanced default scope; the dialog lets the user change it. -->
+    <Property Id="WixAppFolder" Value="WixPerUserFolder" />
+
     <Feature Id="ProductFeature" Title="OneDrive Local Opener" Level="1">
-      <ComponentGroupRef Id="HostFiles" />
-      <ComponentGroupRef Id="BrowserRegistration" />
+      <ComponentGroupRef Id="HostFiles_User" />
+      <ComponentGroupRef Id="HostFiles_Machine" />
+      <ComponentGroupRef Id="PerUserRegistry" />
+      <ComponentGroupRef Id="PerMachineRegistry" />
     </Feature>
 
     <!--
-      Deferred custom action: runs Host.exe --register after files are installed.
-      Host.exe writes the NMH manifest and browser extension force-list entries.
+      Post-install: run Host.exe register with the correct scope.
+      WixUI_Advanced sets APPLICATIONFOLDER to the resolved install path
+      and WixAppFolder to "WixPerUserFolder" or "WixPerMachineFolder".
     -->
     <SetProperty Id="RegisterNMH"
-                 Value="&quot;[INSTALLFOLDER]Host.exe&quot; register --scope $(var.InstallScope)"
-                 Before="RegisterNMH"
-                 Sequence="execute" />
+                 Value="&quot;[APPLICATIONFOLDER]Host.exe&quot; register --scope user"
+                 Before="RegisterNMH" Sequence="execute"
+                 Condition="WixAppFolder = &quot;WixPerUserFolder&quot;" />
+    <SetProperty Id="RegisterNMH"
+                 Value="&quot;[APPLICATIONFOLDER]Host.exe&quot; register --scope machine"
+                 Before="RegisterNMH" Sequence="execute"
+                 Condition="WixAppFolder = &quot;WixPerMachineFolder&quot;" />
     <CustomAction Id="RegisterNMH"
                   BinaryRef="Wix4UtilCA_X86"
                   DllEntry="WixQuietExec64"
@@ -55,10 +52,15 @@
                   Impersonate="no"
                   Return="check" />
 
+    <!-- Pre-uninstall: run Host.exe unregister -->
     <SetProperty Id="UnregisterNMH"
-                 Value="&quot;[INSTALLFOLDER]Host.exe&quot; unregister --scope $(var.InstallScope)"
-                 Before="UnregisterNMH"
-                 Sequence="execute" />
+                 Value="&quot;[APPLICATIONFOLDER]Host.exe&quot; unregister --scope user"
+                 Before="UnregisterNMH" Sequence="execute"
+                 Condition="WixAppFolder = &quot;WixPerUserFolder&quot;" />
+    <SetProperty Id="UnregisterNMH"
+                 Value="&quot;[APPLICATIONFOLDER]Host.exe&quot; unregister --scope machine"
+                 Before="UnregisterNMH" Sequence="execute"
+                 Condition="WixAppFolder = &quot;WixPerMachineFolder&quot;" />
     <CustomAction Id="UnregisterNMH"
                   BinaryRef="Wix4UtilCA_X86"
                   DllEntry="WixQuietExec64"
@@ -71,43 +73,87 @@
       <Custom Action="UnregisterNMH" Before="RemoveFiles">Installed AND REMOVE~="ALL"</Custom>
     </InstallExecuteSequence>
 
-    <ui:WixUI Id="WixUI_Minimal" />
+    <!-- WixUI_Advanced: Welcome → (optional) scope selection → Install → Finish -->
+    <ui:WixUI Id="WixUI_Advanced" />
     <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
   </Package>
 
+  <!-- ═══ Directory structure ════════════════════════════════════════════════════ -->
   <Fragment>
-    <StandardDirectory Id="$(var.InstallDir)">
-      <Directory Id="INSTALLFOLDER" Name="$(var.InstallSubDir)" />
+    <!-- Per-user:    %LOCALAPPDATA%\Programs\OneDriveLocalOpener -->
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="WixPerUserFolder" Name="Programs\OneDriveLocalOpener" />
+    </StandardDirectory>
+
+    <!-- Per-machine: %ProgramFiles%\ACS Solutions\OneDriveLocalOpener -->
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="WixPerMachineFolder" Name="ACS Solutions\OneDriveLocalOpener" />
     </StandardDirectory>
   </Fragment>
 
+  <!-- ═══ File components ════════════════════════════════════════════════════════ -->
   <Fragment>
-    <ComponentGroup Id="HostFiles" Directory="INSTALLFOLDER">
-      <Component Id="HostExe" Guid="A1B2C3D4-E5F6-4A7B-8C9D-E0F1A2B3C4D5">
-        <File Id="HostExeFile"
-              Source="$(var.HostPublishDir)Host.exe"
-              KeyPath="yes" />
+    <!--
+      Files are duplicated across two conditioned component groups so WiX installs
+      to the correct directory regardless of scope. Only one group is active at runtime.
+    -->
+    <ComponentGroup Id="HostFiles_User" Directory="WixPerUserFolder">
+      <Component Id="HostExe_User" Guid="A1B2C3D4-E5F6-4A7B-8C9D-E0F1A2B3C4D5"
+                 Condition="WixAppFolder = &quot;WixPerUserFolder&quot;">
+        <File Source="$(HostPublishDir)Host.exe" KeyPath="yes" />
       </Component>
-      <Component Id="RuntimeConfig" Guid="B2C3D4E5-F6A7-4B8C-9D0E-F1A2B3C4D5E6">
-        <File Id="RuntimeConfigFile"
-              Source="$(var.HostPublishDir)Host.runtimeconfig.json"
-              KeyPath="yes" />
+      <Component Id="RuntimeConfig_User" Guid="B2C3D4E5-F6A7-4B8C-9D0E-F1A2B3C4D5E6"
+                 Condition="WixAppFolder = &quot;WixPerUserFolder&quot;">
+        <File Source="$(HostPublishDir)Host.runtimeconfig.json" KeyPath="yes" />
       </Component>
     </ComponentGroup>
 
-    <!-- NMH registry: written declaratively by WiX for clean uninstall tracking.
-         Host.exe --register also writes these + the NMH manifest JSON + extension force-list. -->
-    <ComponentGroup Id="BrowserRegistration" Directory="INSTALLFOLDER">
-      <Component Id="ChromeNmhReg" Guid="C3D4E5F6-A7B8-4C9D-0E1F-A2B3C4D5E6F7">
-        <RegistryKey Root="$(var.RegistryRoot)"
+    <ComponentGroup Id="HostFiles_Machine" Directory="WixPerMachineFolder">
+      <Component Id="HostExe_Machine" Guid="A2B3C4D5-E6F7-4B8C-9D0E-F1A2B3C4D5E6"
+                 Condition="WixAppFolder = &quot;WixPerMachineFolder&quot;">
+        <File Source="$(HostPublishDir)Host.exe" KeyPath="yes" />
+      </Component>
+      <Component Id="RuntimeConfig_Machine" Guid="B3C4D5E6-F7A8-4C9D-0E1F-A2B3C4D5E6F7"
+                 Condition="WixAppFolder = &quot;WixPerMachineFolder&quot;">
+        <File Source="$(HostPublishDir)Host.runtimeconfig.json" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+  </Fragment>
+
+  <!-- ═══ Registry components ════════════════════════════════════════════════════ -->
+  <Fragment>
+    <!-- Per-user: HKCU — NMH registration for Chrome and Edge -->
+    <ComponentGroup Id="PerUserRegistry" Directory="WixPerUserFolder">
+      <Component Id="ChromeNmh_User" Guid="C3D4E5F6-A7B8-4C9D-0E1F-A2B3C4D5E6F7"
+                 Condition="WixAppFolder = &quot;WixPerUserFolder&quot;">
+        <RegistryKey Root="HKCU"
                      Key="Software\Google\Chrome\NativeMessagingHosts\uk.co.acs_solutions.onedrive_local_opener">
-          <RegistryValue Type="string" Value="[INSTALLFOLDER]nmh-manifest.json" KeyPath="yes" />
+          <RegistryValue Type="string" Value="[WixPerUserFolder]nmh-manifest.json" KeyPath="yes" />
         </RegistryKey>
       </Component>
-      <Component Id="EdgeNmhReg" Guid="D4E5F6A7-B8C9-4D0E-1F2A-B3C4D5E6F7A8">
-        <RegistryKey Root="$(var.RegistryRoot)"
+      <Component Id="EdgeNmh_User" Guid="D4E5F6A7-B8C9-4D0E-1F2A-B3C4D5E6F7A8"
+                 Condition="WixAppFolder = &quot;WixPerUserFolder&quot;">
+        <RegistryKey Root="HKCU"
                      Key="Software\Microsoft\Edge\NativeMessagingHosts\uk.co.acs_solutions.onedrive_local_opener">
-          <RegistryValue Type="string" Value="[INSTALLFOLDER]nmh-manifest.json" KeyPath="yes" />
+          <RegistryValue Type="string" Value="[WixPerUserFolder]nmh-manifest.json" KeyPath="yes" />
+        </RegistryKey>
+      </Component>
+    </ComponentGroup>
+
+    <!-- Per-machine: HKLM — NMH registration for Chrome and Edge -->
+    <ComponentGroup Id="PerMachineRegistry" Directory="WixPerMachineFolder">
+      <Component Id="ChromeNmh_Machine" Guid="E5F6A7B8-C9D0-4E1F-2A3B-C4D5E6F7A8B9"
+                 Condition="WixAppFolder = &quot;WixPerMachineFolder&quot;">
+        <RegistryKey Root="HKLM"
+                     Key="Software\Google\Chrome\NativeMessagingHosts\uk.co.acs_solutions.onedrive_local_opener">
+          <RegistryValue Type="string" Value="[WixPerMachineFolder]nmh-manifest.json" KeyPath="yes" />
+        </RegistryKey>
+      </Component>
+      <Component Id="EdgeNmh_Machine" Guid="F6A7B8C9-D0E1-4F2A-3B4C-D5E6F7A8B9C0"
+                 Condition="WixAppFolder = &quot;WixPerMachineFolder&quot;">
+        <RegistryKey Root="HKLM"
+                     Key="Software\Microsoft\Edge\NativeMessagingHosts\uk.co.acs_solutions.onedrive_local_opener">
+          <RegistryValue Type="string" Value="[WixPerMachineFolder]nmh-manifest.json" KeyPath="yes" />
         </RegistryKey>
       </Component>
     </ComponentGroup>

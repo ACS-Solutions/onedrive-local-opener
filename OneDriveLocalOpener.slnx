@@ -5,4 +5,5 @@
   <Folder Name="/host/">
     <Project Path="host/Host.csproj" />
   </Folder>
+  <Folder Name="/installer/" />
 </Solution>

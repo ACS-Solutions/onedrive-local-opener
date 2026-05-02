@@ -69,7 +69,7 @@ jobs:
           path: host/publish/
 
   build-msi:
-    name: Build MSI installers
+    name: Build MSI installer
     runs-on: windows-latest
     needs: build-host
     steps:
@@ -94,26 +94,14 @@ jobs:
           name: host-publish
           path: host/publish/
 
-      - name: Build per-user MSI
-        run: dotnet build installer/OneDriveLocalOpener.wixproj -c Release -p:InstallScope=user -p:OutputPath=../artifacts/
+      - name: Build MSI
+        run: dotnet build installer/OneDriveLocalOpener.wixproj -c Release -p:OutputPath=../artifacts/
 
-      - name: Build per-machine MSI
-        run: dotnet build installer/OneDriveLocalOpener.wixproj -c Release -p:InstallScope=machine -p:OutputPath=../artifacts/
-
-      - name: Rename MSI outputs
-        shell: pwsh
-        run: |
-          $tag = '${{ github.ref_name }}'
-          Rename-Item artifacts/OneDriveLocalOpener.msi "OneDriveLocalOpener-user-$tag.msi" -ErrorAction SilentlyContinue
-          # second build overwrites; use intermediate output dirs instead
-          Write-Output "Artifacts:"
-          Get-ChildItem artifacts/
-
-      - name: Upload MSI artifacts
+      - name: Upload MSI artifact
         uses: actions/upload-artifact@v4
         with:
-          name: msi-artifacts
-          path: artifacts/*.msi
+          name: msi-artifact
+          path: artifacts/OneDriveLocalOpener.msi
 
   release:
     name: Create GitHub Release
